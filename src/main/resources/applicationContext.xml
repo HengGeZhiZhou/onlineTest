@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context" xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd">
+
+
+    <context:component-scan base-package="HelloSpringMVC"/>
+
+    <!--启用MVC注解 -->
+    <mvc:annotation-driven />
+
+    <!-- 将自定义的swagger配置类加载到spring容器 -->
+    <!--<bean class="HelloSpringMVC.swagger.SwaggerConfig" />-->
+
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="cacheManager" ref="cacheManager"/>
+        <property name="authenticator" ref="authenticator"/>
+        <property name="realms">
+            <list>
+                <ref bean="jdbcRealm"/>
+                <ref bean="secondRealm"/>
+            </list>
+        </property>
+    </bean>
+
+    <!-- Let's use some enterprise caching support for better performance.  You can replace this with any enterprise
+         caching framework implementation that you like (Terracotta+Ehcache, Coherence, GigaSpaces, etc -->
+    <bean id="cacheManager" class="org.apache.shiro.cache.ehcache.EhCacheManager">
+        <!-- Set a net.sf.ehcache.CacheManager instance here if you already have one.  If not, a new one
+             will be creaed with a default config:
+             <property name="cacheManager" ref="ehCacheManager"/> -->
+        <!-- If you don't have a pre-built net.sf.ehcache.CacheManager instance to inject, but you want
+             a specific Ehcache configuration to be used, specify that here.  If you don't, a default
+             will be used.:
+        <property name="cacheManagerConfigFile" value="classpath:some/path/to/ehcache.xml"/> -->
+    </bean>
+
+    <!-- Used by the SecurityManager to access security data (users, roles, etc).
+         Many other realm implementations can be used too (PropertiesRealm,
+         LdapRealm, etc. -->
+    <!--多个认证策略时  设置认证方法  -->
+    <bean id="authenticator"
+          class="org.apache.shiro.authc.pam.ModularRealmAuthenticator">
+        <property name="authenticationStrategy">
+            <bean class="org.apache.shiro.authc.pam.AtLeastOneSuccessfulStrategy"/>
+        </property>
+    </bean>
+
+    <!--设置多个认证策略-->
+    <bean id="jdbcRealm" class="HelloSpringMVC.shiro.ShiroRealm">
+        <property name="credentialsMatcher">
+            <bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+                <property name="hashAlgorithmName" value="MD5"/>
+                <property name="hashIterations" value="1024"/>
+            </bean>
+        </property>
+    </bean>
+    <bean id="secondRealm" class="HelloSpringMVC.shiro.Realm.SecondRealm">
+        <property name="credentialsMatcher">
+            <bean class="org.apache.shiro.authc.credential.HashedCredentialsMatcher">
+                <property name="hashAlgorithmName" value="SHA1"/>
+                <property name="hashIterations" value="1024"/>
+            </bean>
+        </property>
+    </bean>
+
+    <!-- =========================================================
+         Shiro Spring-specific integration
+         ========================================================= -->
+    <!-- Post processor that automatically invokes init() and destroy() methods
+         for Spring-configured Shiro objects so you don't have to
+         1) specify an init-method and destroy-method attributes for every bean
+            definition and
+         2) even know which Shiro objects require these methods to be
+            called. -->
+    <bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>
+
+    <!-- Enable Shiro Annotations for Spring-configured beans.  Only run after
+         the lifecycleBeanProcessor has run: -->
+    <bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator"
+          depends-on="lifecycleBeanPostProcessor"/>
+    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">
+        <property name="securityManager" ref="securityManager"/>
+    </bean>
+    <!-- Define the Shiro Filter here (as a FactoryBean) instead of directly in web.xml -
+         web.xml uses the DelegatingFilterProxy to access this bean.  This allows us
+         to wire things with more control as well utilize nice Spring things such as
+         PropertiesPlaceholderConfigurer and abstract beans or anything else we might need: -->
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+        <property name="securityManager" ref="securityManager"/>
+        <property name="loginUrl" value="/login.jsp"/>
+        <property name="successUrl" value="/index.jsp"/>
+        <property name="unauthorizedUrl" value="/unauthorized.jsp"/>
+        <property name="filters">
+            <map>
+            </map>
+        </property>
+        <property name="filterChainDefinitions">
+            <value>
+                /**=anon
+                <!--/login.jsp = anon-->
+                <!--/Test/login.do=anon-->
+                <!--/Test/logout.do=logout-->
+                <!--/user.jsp=roles[user]-->
+                <!--/admin.jsp=roles[admin]-->
+                <!--静态资源-->
+                <!--/swagger/**=anon-->
+                # everything else requires authentication:
+                <!--/** = authc-->
+            </value>
+        </property>
+    </bean>
+
+    <!--引入外部属性文件-->
+    <context:property-placeholder location="classpath:jdbc.properties"/>
+
+    <!--配置c3p0连接池-->
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+        <property name="driverClass" value="${jdbc.driverClass}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="user" value="${jdbc.username}"/>
+    </bean>
+
+    <!--配置hibernate属性-->
+    <bean id="sessionFactory" class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+        <!--注入连接池-->
+        <property name="dataSource" ref="dataSource"/>
+        <!--配置数据库基础属性-->
+        <property name="hibernateProperties">
+            <props>
+                <prop key="show_sql">true</prop>
+                <prop key="hibernate.dialect">org.hibernate.dialect.MySQLDialect</prop>
+                <prop key="hibernate.connection.url">jdbc:mysql://localhost:3306/test</prop>
+                <prop key="hibernate.connection.driver_class">com.mysql.jdbc.Driver</prop>
+            </props>
+        </property>
+        <!--<property name="mappingLocations">-->
+        <!--<list>-->
+            <!--<value>classpath:HelloSpringMVC/entity/User.hbm.xml</value>-->
+        <!--</list>-->
+    <!--</property>-->
+        <property name="mappingResources">
+            <list>
+                <value>HelloSpringMVC/entity/User.hbm.xml</value>
+                <value>HelloSpringMVC/entity/Student.hbm.xml</value>
+                <value>HelloSpringMVC/entity/Questions.hbm.xml</value>
+            </list>
+        </property>
+        <!--配置映射文件-->
+        <!--<property name="mappingResources">-->
+            <!--<list>-->
+                <!--<value>classpath:HelloSpringMVC/entity/User.hbm.xml</value>-->
+                <!--&lt;!&ndash;<value>priv/lyh/arena/entity/UserLogin.hbm.xml</value>&ndash;&gt;-->
+                <!--&lt;!&ndash;<value>priv/lyh/arena/entity/UserInfo.hbm.xml</value>&ndash;&gt;-->
+                <!--&lt;!&ndash;<value>priv/lyh/arena/entity/Record.hbm.xml</value>&ndash;&gt;-->
+                <!--&lt;!&ndash;<value>priv/lyh/arena/entity/MobileUser.hbm.xml</value>&ndash;&gt;-->
+            <!--</list>-->
+        <!--</property>-->
+    </bean>
+
+    <!--开启事务管理-->
+    <bean id="transactionManager" class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+        <property name="sessionFactory" ref="sessionFactory"/>
+    </bean>
+
+    <!--开启事物注解-->
+    <tx:annotation-driven transaction-manager="transactionManager"/>
+
+
+</beans>

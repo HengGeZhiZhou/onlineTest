@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE hibernate-mapping PUBLIC
+    "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+    "http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+<hibernate-mapping>
+
+    <class name="HelloSpringMVC.entity.Questions" table="questions" schema="test">
+        <id name="questionId" column="question_id"/>
+        <property name="question" column="question"/>
+        <property name="chooseA" column="choose_a"/>
+        <property name="chooseB" column="choose_b"/>
+        <property name="chooseC" column="choose_c"/>
+        <property name="chooseD" column="choose_d"/>
+        <property name="answer" column="answer"/>
+    </class>
+</hibernate-mapping>
